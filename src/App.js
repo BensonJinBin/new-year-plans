@@ -1,47 +1,85 @@
 import React, { useState, useEffect } from 'react';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
-import { FaPlus, FaTrash, FaEdit, FaSave, FaTimes } from 'react-icons/fa';
+import { FaPlus, FaTrash, FaEdit, FaSave, FaTimes, FaSignOutAlt, FaUser } from 'react-icons/fa';
+import AuthPage from './components/AuthPage';
+import { onAuthStateChange, signOut } from './services/authService';
+import { getPlans, addPlan, updatePlan, deletePlan, subscribeToPlans } from './services/plansService';
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [plans, setPlans] = useState([]);
   const [newPlan, setNewPlan] = useState({ title: '', description: '', progress: 0 });
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
   const [editForm, setEditForm] = useState({ title: '', description: '', progress: 0 });
-  const [isInitialized, setIsInitialized] = useState(false);
 
-  // 从localStorage加载数据
+  // 监听认证状态变化
   useEffect(() => {
-    const savedPlans = localStorage.getItem('newYearPlans2026');
-    if (savedPlans) {
-      setPlans(JSON.parse(savedPlans));
-    }
-    setIsInitialized(true);
+    const { data: { subscription } } = onAuthStateChange(async (event, session) => {
+      if (session) {
+        setUser(session.user);
+        await loadPlans();
+      } else {
+        setUser(null);
+        setPlans([]);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // 保存数据到localStorage
-  useEffect(() => {
-    if (isInitialized) {
-      localStorage.setItem('newYearPlans2026', JSON.stringify(plans));
-    }
-  }, [plans, isInitialized]);
-
-  const handleAddPlan = () => {
-    if (newPlan.title.trim()) {
-      const plan = {
-        id: Date.now(),
-        ...newPlan,
-        createdAt: new Date().toISOString()
-      };
-      setPlans([...plans, plan]);
-      setNewPlan({ title: '', description: '', progress: 0 });
-      setShowAddForm(false);
+  // 加载用户的计划数据
+  const loadPlans = async () => {
+    const result = await getPlans();
+    if (result.success) {
+      setPlans(result.data);
     }
   };
 
-  const handleDeletePlan = (id) => {
-    setPlans(plans.filter(plan => plan.id !== id));
+  // 监听计划数据实时变化
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = subscribeToPlans((payload) => {
+      if (payload.eventType === 'INSERT') {
+        setPlans(prev => [payload.new, ...prev]);
+      } else if (payload.eventType === 'UPDATE') {
+        setPlans(prev => prev.map(p => p.id === payload.new.id ? payload.new : p));
+      } else if (payload.eventType === 'DELETE') {
+        setPlans(prev => prev.filter(p => p.id !== payload.old.id));
+      }
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  const handleAddPlan = async () => {
+    if (newPlan.title.trim()) {
+      const result = await addPlan(newPlan);
+      if (result.success) {
+        setPlans(prev => [result.data, ...prev]);
+        setNewPlan({ title: '', description: '', progress: 0 });
+        setShowAddForm(false);
+      } else {
+        alert('添加计划失败: ' + result.error);
+      }
+    }
+  };
+
+  const handleDeletePlan = async (id) => {
+    if (window.confirm('确定要删除这个计划吗？')) {
+      const result = await deletePlan(id);
+      if (result.success) {
+        setPlans(prev => prev.filter(p => p.id !== id));
+      } else {
+        alert('删除计划失败: ' + result.error);
+      }
+    }
   };
 
   const handleEditPlan = (plan) => {
@@ -49,19 +87,32 @@ function App() {
     setEditForm({ title: plan.title, description: plan.description, progress: plan.progress });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editForm.title.trim()) {
-      setPlans(plans.map(plan => 
-        plan.id === editingPlan 
-          ? { ...plan, ...editForm }
-          : plan
-      ));
-      setEditingPlan(null);
+      const result = await updatePlan(editingPlan, editForm);
+      if (result.success) {
+        setEditingPlan(null);
+      } else {
+        alert('更新计划失败: ' + result.error);
+      }
     }
   };
 
   const handleCancelEdit = () => {
     setEditingPlan(null);
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm('确定要退出登录吗？')) {
+      const result = await signOut();
+      if (!result.success) {
+        alert('登出失败: ' + result.error);
+      }
+    }
+  };
+
+  const handleLoginSuccess = (userData) => {
+    setUser(userData);
   };
 
   const getProgressColor = (progress) => {
@@ -80,6 +131,23 @@ function App() {
     return '已完成';
   };
 
+  // 显示加载状态
+  if (loading) {
+    return (
+      <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+        <div className="text-center text-white">
+          <div className="spinner-border mb-3" role="status" style={{ width: '3rem', height: '3rem' }}></div>
+          <p className="mb-0">加载中...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 未登录时显示认证页面
+  if (!user) {
+    return <AuthPage onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="App">
       <div className="container py-5">
@@ -91,6 +159,20 @@ function App() {
           <p className="lead text-secondary">
             设定目标，追踪进度，实现梦想
           </p>
+          {/* 用户信息 */}
+          <div className="user-info mt-3">
+            <span className="badge bg-light text-dark">
+              <FaUser className="me-1" />
+              {user.email}
+            </span>
+            <button 
+              className="btn btn-outline-danger btn-sm ms-2"
+              onClick={handleLogout}
+            >
+              <FaSignOutAlt className="me-1" />
+              退出登录
+            </button>
+          </div>
         </div>
 
         {/* 统计信息 */}
@@ -170,7 +252,7 @@ function App() {
           ) : (
             plans.map((plan) => (
               <div key={plan.id} className="col-lg-6 col-xl-4 mb-4">
-                <div className="card plan-card h-100">
+                <div className="card plan-card h-100" style={{ animation: 'fadeIn 0.3s ease-out' }}>
                   <div className="card-body">
                     {editingPlan === plan.id ? (
                       // 编辑模式

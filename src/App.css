@@ -288,6 +288,43 @@ body {
   }
 }
 
+/* 用户信息样式 */
+.user-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.user-info .badge {
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  background: #f8f9fa;
+  color: #2d3748;
+  border: 1px solid #e2e8f0;
+}
+
+.user-info .btn-outline-danger {
+  border: 1px solid #e2e8f0;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.3s ease;
+}
+
+.user-info .btn-outline-danger:hover {
+  background: #e53e3e;
+  border-color: #e53e3e;
+  color: white;
+  transform: translateY(-1px);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
   .stat-card {
