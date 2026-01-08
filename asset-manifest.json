@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/new-year-plans/static/css/main.c8d9bbf1.css",
+    "main.js": "/new-year-plans/static/js/main.bceff3a7.js",
+    "static/js/453.400e571b.chunk.js": "/new-year-plans/static/js/453.400e571b.chunk.js",
+    "index.html": "/new-year-plans/index.html",
+    "main.c8d9bbf1.css.map": "/new-year-plans/static/css/main.c8d9bbf1.css.map",
+    "main.bceff3a7.js.map": "/new-year-plans/static/js/main.bceff3a7.js.map",
+    "453.400e571b.chunk.js.map": "/new-year-plans/static/js/453.400e571b.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.c8d9bbf1.css",
+    "static/js/main.bceff3a7.js"
+  ]
+}
