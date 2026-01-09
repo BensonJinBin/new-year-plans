@@ -91,6 +91,8 @@ function App() {
     if (editForm.title.trim()) {
       const result = await updatePlan(editingPlan, editForm);
       if (result.success) {
+        // 立即更新本地状态
+        setPlans(prev => prev.map(p => p.id === editingPlan ? { ...p, ...result.data } : p));
         setEditingPlan(null);
       } else {
         alert('更新计划失败: ' + result.error);
