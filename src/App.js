@@ -4,7 +4,8 @@ import './App.css';
 import { FaPlus, FaTrash, FaEdit, FaSave, FaTimes, FaSignOutAlt, FaUser } from 'react-icons/fa';
 import AuthPage from './components/AuthPage';
 import { onAuthStateChange, signOut } from './services/authService';
-import { getPlans, addPlan, updatePlan, deletePlan, subscribeToPlans } from './services/plansService';
+import { getPlans, addPlan, updatePlan, deletePlan, subscribeToPlans, reorderPlans } from './services/plansService';
+import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -102,6 +103,30 @@ function App() {
 
   const handleCancelEdit = () => {
     setEditingPlan(null);
+  };
+
+  // 处理拖拽结束
+  const handleDragEnd = async (result) => {
+    if (!result.destination) {
+      return;
+    }
+
+    const items = Array.from(plans);
+    const [reorderedItem] = items.splice(result.source.index, 1);
+    items.splice(result.destination.index, 0, reorderedItem);
+
+    // 更新本地状态
+    setPlans(items);
+
+    // 保存到数据库
+    const planIds = items.map(plan => plan.id);
+    const reorderResult = await reorderPlans(planIds);
+
+    if (!reorderResult.success) {
+      alert('更新顺序失败: ' + reorderResult.error);
+      // 如果失败，重新加载数据
+      await loadPlans();
+    }
   };
 
   const handleLogout = async () => {
@@ -242,121 +267,145 @@ function App() {
         )}
 
         {/* 计划列表 */}
-        <div className="row">
-          {plans.length === 0 ? (
-            <div className="col-12">
-              <div className="empty-state text-center py-5">
-                <div className="empty-icon">🎯</div>
-                <h3 className="mb-3">还没有计划</h3>
-                <p className="text-muted">点击上方的"添加新计划"按钮开始创建你的2026年计划吧！</p>
-              </div>
-            </div>
-          ) : (
-            plans.map((plan) => (
-              <div key={plan.id} className="col-lg-6 col-xl-4 mb-4">
-                <div className="card plan-card h-100" style={{ animation: 'fadeIn 0.3s ease-out' }}>
-                  <div className="card-body">
-                    {editingPlan === plan.id ? (
-                      // 编辑模式
-                      <div className="edit-mode">
-                        <div className="mb-3">
-                          <label className="form-label">计划标题</label>
-                          <input
-                            type="text"
-                            className="form-control"
-                            value={editForm.title}
-                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                          />
-                        </div>
-                        <div className="mb-3">
-                          <label className="form-label">完成情况描述</label>
-                          <textarea
-                            className="form-control"
-                            rows="3"
-                            value={editForm.description}
-                            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          />
-                        </div>
-                        <div className="mb-3">
-                          <label className="form-label">进度: {editForm.progress}%</label>
-                          <input
-                            type="range"
-                            className="form-range"
-                            min="0"
-                            max="100"
-                            value={editForm.progress}
-                            onChange={(e) => setEditForm({ ...editForm, progress: parseInt(e.target.value) })}
-                          />
-                        </div>
-                        <div className="d-flex gap-2">
-                          <button className="btn btn-success btn-sm" onClick={handleSaveEdit}>
-                            <FaSave className="me-1" />
-                            保存
-                          </button>
-                          <button className="btn btn-secondary btn-sm" onClick={handleCancelEdit}>
-                            <FaTimes className="me-1" />
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      // 显示模式
-                      <div className="display-mode">
-                        <div className="d-flex justify-content-between align-items-start mb-2">
-                          <h5 className="card-title mb-0">{plan.title}</h5>
-                          <span className={`badge bg-${getProgressColor(plan.progress)}`}>
-                            {getProgressLabel(plan.progress)}
-                          </span>
-                        </div>
-                        
-                        {/* 进度条 */}
-                        <div className="progress mb-3" style={{ height: '10px' }}>
-                          <div 
-                            className={`progress-bar bg-${getProgressColor(plan.progress)}`}
-                            role="progressbar"
-                            style={{ width: `${plan.progress}%` }}
-                          />
-                        </div>
-                        
-                        {/* 进度百分比 */}
-                        <div className="text-muted small mb-3">
-                          进度: <strong>{plan.progress}%</strong>
-                        </div>
-                        
-                        {/* 描述 */}
-                        {plan.description && (
-                          <div className="description-container mb-3">
-                            <p className="card-text text-muted mb-0">
-                              {plan.description}
-                            </p>
-                          </div>
-                        )}
-                        
-                        {/* 操作按钮 */}
-                        <div className="d-flex gap-2">
-                          <button 
-                            className="btn btn-outline-primary btn-sm"
-                            onClick={() => handleEditPlan(plan)}
-                          >
-                            <FaEdit className="me-1" />
-                            编辑
-                          </button>
-                          <button 
-                            className="btn btn-outline-danger btn-sm"
-                            onClick={() => handleDeletePlan(plan.id)}
-                          >
-                            <FaTrash className="me-1" />
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    )}
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="plans" direction="horizontal">
+            {(provided) => (
+              <div
+                className="row"
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+              >
+                {plans.length === 0 ? (
+                  <div className="col-12">
+                    <div className="empty-state text-center py-5">
+                      <div className="empty-icon">🎯</div>
+                      <h3 className="mb-3">还没有计划</h3>
+                      <p className="text-muted">点击上方的"添加新计划"按钮开始创建你的2026年计划吧！</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  plans.map((plan, index) => (
+                    <Draggable key={plan.id} draggableId={plan.id.toString()} index={index}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.draggableProps}
+                          {...provided.dragHandleProps}
+                          className="col-lg-6 col-xl-4 mb-4"
+                          style={{
+                            ...provided.draggableProps.style,
+                            opacity: snapshot.isDragging ? 0.8 : 1,
+                          }}
+                        >
+                          <div className="card plan-card h-100" style={{ animation: 'fadeIn 0.3s ease-out' }}>
+                            <div className="card-body">
+                              {editingPlan === plan.id ? (
+                                // 编辑模式
+                                <div className="edit-mode">
+                                  <div className="mb-3">
+                                    <label className="form-label">计划标题</label>
+                                    <input
+                                      type="text"
+                                      className="form-control"
+                                      value={editForm.title}
+                                      onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="mb-3">
+                                    <label className="form-label">完成情况描述</label>
+                                    <textarea
+                                      className="form-control"
+                                      rows="3"
+                                      value={editForm.description}
+                                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                                    />
+                                  </div>
+                                  <div className="mb-3">
+                                    <label className="form-label">进度: {editForm.progress}%</label>
+                                    <input
+                                      type="range"
+                                      className="form-range"
+                                      min="0"
+                                      max="100"
+                                      value={editForm.progress}
+                                      onChange={(e) => setEditForm({ ...editForm, progress: parseInt(e.target.value) })}
+                                    />
+                                  </div>
+                                  <div className="d-flex gap-2">
+                                    <button className="btn btn-success btn-sm" onClick={handleSaveEdit}>
+                                      <FaSave className="me-1" />
+                                      保存
+                                    </button>
+                                    <button className="btn btn-secondary btn-sm" onClick={handleCancelEdit}>
+                                      <FaTimes className="me-1" />
+                                      取消
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                // 显示模式
+                                <div className="display-mode">
+                                  <div className="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 className="card-title mb-0">{plan.title}</h5>
+                                    <span className={`badge bg-${getProgressColor(plan.progress)}`}>
+                                      {getProgressLabel(plan.progress)}
+                                    </span>
+                                  </div>
+
+                                  {/* 进度条 */}
+                                  <div className="progress mb-3" style={{ height: '10px' }}>
+                                    <div
+                                      className={`progress-bar bg-${getProgressColor(plan.progress)}`}
+                                      role="progressbar"
+                                      style={{ width: `${plan.progress}%` }}
+                                    />
+                                  </div>
+
+                                  {/* 进度百分比 */}
+                                  <div className="text-muted small mb-3">
+                                    进度: <strong>{plan.progress}%</strong>
+                                  </div>
+
+                                  {/* 描述 */}
+                                  {plan.description && (
+                                    <div className="description-container mb-3">
+                                      <p className="card-text text-muted mb-0">
+                                        {plan.description}
+                                      </p>
+                                    </div>
+                                  )}
+
+                                  {/* 操作按钮 */}
+                                  <div className="d-flex gap-2">
+                                    <button
+                                      className="btn btn-outline-primary btn-sm"
+                                      onClick={() => handleEditPlan(plan)}
+                                    >
+                                      <FaEdit className="me-1" />
+                                      编辑
+                                    </button>
+                                    <button
+                                      className="btn btn-outline-danger btn-sm"
+                                      onClick={() => handleDeletePlan(plan.id)}
+                                    >
+                                      <FaTrash className="me-1" />
+                                      删除
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </Draggable>
+                  ))
+                )}
+                {provided.placeholder}
               </div>
-            ))
-          )}
-        </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </div>
     </div>
   );

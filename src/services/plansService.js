@@ -12,7 +12,7 @@ export const getPlans = async () => {
     const { data, error } = await supabase
       .from('plans')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('order', { ascending: true });
 
     if (error) throw error;
 
@@ -29,6 +29,16 @@ export const addPlan = async (plan) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('用户未登录');
 
+    // 获取当前用户的最大 order 值
+    const { data: existingPlans } = await supabase
+      .from('plans')
+      .select('order')
+      .eq('user_id', user.id)
+      .order('order', { ascending: false })
+      .limit(1);
+
+    const maxOrder = existingPlans && existingPlans.length > 0 ? existingPlans[0].order : 0;
+
     const { data, error } = await supabase
       .from('plans')
       .insert([{
@@ -36,6 +46,7 @@ export const addPlan = async (plan) => {
         title: plan.title,
         description: plan.description,
         progress: plan.progress,
+        order: maxOrder + 1,
       }])
       .select()
       .single();
@@ -106,4 +117,34 @@ export const subscribeToPlans = (callback) => {
   return () => {
     subscription.unsubscribe();
   };
+};
+
+// 批量更新计划顺序
+export const reorderPlans = async (planIds) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('用户未登录');
+
+    // 使用事务批量更新每个计划的 order 值
+    const promises = planIds.map((id, index) =>
+      supabase
+        .from('plans')
+        .update({ order: index })
+        .eq('id', id)
+        .eq('user_id', user.id)
+    );
+
+    const results = await Promise.all(promises);
+
+    // 检查是否有错误
+    const errors = results.filter(result => result.error);
+    if (errors.length > 0) {
+      throw new Error(errors[0].error.message);
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('更新顺序失败:', error);
+    return { success: false, error: error.message };
+  }
 };
